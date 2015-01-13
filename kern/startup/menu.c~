@@ -294,7 +294,7 @@ static int cmd_dbtOn(int nargs, char **args) {
     (void)nargs;
     (void)args;
     if(dbflags==0) {
-        dbflags=0x0010; //referenced in lib.h
+        dbflags=1; //referenced in lib.h
         kprintf("Debugging is now on\n");
     }
     return 0;
