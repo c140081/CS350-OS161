@@ -260,8 +260,16 @@ cv_create(const char *name)
         }
         
         // add stuff here as needed
-        
-        return cv;
+    cv->cv_wchan=wchan_create(cv->cv_name);
+	if (cv->cv_wchan == NULL) {//the creation process did not go well
+		kfree(cv->cv_name);//clear space allocated fro the name
+		kfree(cv);//clear the actual lock from memory
+		return NULL;
+	}
+	
+	//spinlock for some critical sections
+	spinlock_init(&cv->cv_splock);//initializes a spinlock
+    return cv;
 }
 
 void
@@ -270,6 +278,8 @@ cv_destroy(struct cv *cv)
         KASSERT(cv != NULL);
 
         // add stuff here as needed
+    //spinlock_cleanup(&cv->cv_splock);//clear up the associated spinlock
+    wchan_destroy(cv->cv_wchan);//wchan must be empty(wchan checks for us)
         
         kfree(cv->cv_name);
         kfree(cv);
@@ -278,23 +288,32 @@ cv_destroy(struct cv *cv)
 void
 cv_wait(struct cv *cv, struct lock *lock)
 {
-        // Write this
-        (void)cv;    // suppress warning until code gets written
-        (void)lock;  // suppress warning until code gets written
+    KASSERT(lock_do_i_hold(lock)==true);//this should always hold
+    spinlock_acquire(&cv->cv_splock);
+        //kprintf("Running cv_wait");
+        lock_release(lock);
+        wchan_lock(cv->cv_wchan);//"The channel must be locked" ~ wchan.h
+    spinlock_release(&cv->cv_splock);
+        wchan_sleep(cv->cv_wchan);
+        lock_acquire(lock);
 }
 
 void
 cv_signal(struct cv *cv, struct lock *lock)
 {
-        // Write this
-	(void)cv;    // suppress warning until code gets written
-	(void)lock;  // suppress warning until code gets written
+    KASSERT(lock_do_i_hold(lock)==true);
+    //spinlock_acquire(&cv->cv_splock);
+        //kprintf("running cv_signal");
+        wchan_wakeone(cv->cv_wchan);
+    //spinlock_release(&cv->cv_splock);
 }
 
 void
 cv_broadcast(struct cv *cv, struct lock *lock)
 {
-	// Write this
-	(void)cv;    // suppress warning until code gets written
-	(void)lock;  // suppress warning until code gets written
+    KASSERT(lock_do_i_hold(lock)==true);
+    //spinlock_acquire(&cv->cv_splock); //do i need spinlock here?
+        //kprintf("running cv_broadcast");
+        wchan_wakeall(cv->cv_wchan);
+    //spinlock_release(&cv->cv_splock);
 }
