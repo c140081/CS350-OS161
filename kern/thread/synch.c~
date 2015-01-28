@@ -207,7 +207,6 @@ lock_acquire(struct lock *lock)
             wchan_sleep(lock->lock_wchan);
             spinlock_acquire(&lock->lock_splock);
         }
-        lock->lock_thread=curthread;
 	spinlock_release(&lock->lock_splock);//critical section end
 }
 

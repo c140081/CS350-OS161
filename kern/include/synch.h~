@@ -77,7 +77,7 @@ struct lock {
         // add what you need here
         // (don't forget to mark things volatile as needed)
 	struct wchan *lock_wchan;
-	struct spinlock lock_splock;
+	struct spinlock lock_spLock;
 	//track who is holding it(by thread). null if none
 	struct thread *lock_thread;
 };
