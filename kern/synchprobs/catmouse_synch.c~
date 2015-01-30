@@ -27,16 +27,12 @@ static void wakeAll(void);
  
 volatile int curFeeder=0;
 volatile int numEaters=0;
-struct lock *numLock;
 volatile int numBowls;
 struct lock *switchLock;
 
 struct theBowl {
-    struct lock *bowlLock;
-    struct cv *noFeedCv;
     struct cv *waitCv;
     volatile int thisFeeder;
-    volatile int bowlNum;
 };
 
 struct theBowl *theBowls;
@@ -56,15 +52,8 @@ catmouse_sync_init(int bowls)
     numBowls=bowls;
     const char* str;
     switchLock=lock_create("switchLock");
-    numLock=lock_create("numLock");
     theBowls=kmalloc(bowls * sizeof(struct theBowl));//allocate enough memory for all bowls
     for (int i=0; i<bowls; i++) {
-        str = "bowlLock" +i;
-        theBowls[i].bowlLock=lock_create(str);
-        //kprintf("created the lock at %u\n", i);
-        if(theBowls[i].bowlLock == NULL) {
-            panic("Could not create global CatMouse lock");
-        }
         str = "waitCV" + i;
         theBowls[i].waitCv=cv_create(str);
         //kprintf("created the cv at %u\n", i);
@@ -72,7 +61,6 @@ catmouse_sync_init(int bowls)
             panic("Could not create our required CV for CatMouse");
         }
         theBowls[i].thisFeeder=0;
-        theBowls[i].bowlNum=i+1;
     }
     //kprintf("Done initializing catmouse \n");
   return;
@@ -220,41 +208,6 @@ mouse_after_eating(unsigned int bowl)
     lock_release(switchLock);
     wakeAll();
 }
-
-/*int eatingUpdate(){
-   // kprintf("Eating update running\n");
-    int eatCount=0;
-    for(int i=0; i<numBowls; i++) {
-        if(theBowls[i].thisFeeder != 0) {
-            eatCount++;
-            anyEating=theBowls[i].thisFeeder;
-        }
-    }
-    if(eatCount ==0) {
-        anyEating=0;
-    }
-    return eatCount;
-}*/
-
-/*void wakeCats() {
-    kprintf("Attempting to wake all cats\n");
-    for (int i=0; i<numBowls; i++) {
-        //lock_acquire(theBowls[i].bowlLock);
-        //cv_signal(theBowls[i].bowlCatCv, theBowls[i].bowlLock);
-        cv_signal(theBowls[i].bowlCatCv, switchLock);
-        //lock_release(theBowls[i].bowlLock);
-    }
-}
-
-void wakeMice() {
-    kprintf("Attempting to wake all mice\n");
-    for (int i=0; i<numBowls; i++) {
-        //lock_acquire(theBowls[i].bowlLock);
-        //cv_signal(theBowls[i].bowlMouseCv, theBowls[i].bowlLock);
-        cv_signal(theBowls[i].bowlMouseCv, switchLock);
-        //lock_release(theBowls[i].bowlLock);
-    }
-}*/
 
 void wakeAll(){
  //kprintf("Attempting to wake all \n");

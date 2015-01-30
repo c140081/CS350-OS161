@@ -27,16 +27,12 @@ static void wakeAll(void);
  
 volatile int curFeeder=0;
 volatile int numEaters=0;
-struct lock *numLock;
 volatile int numBowls;
 struct lock *switchLock;
 
 struct theBowl {
-    struct lock *bowlLock;
-    struct cv *noFeedCv;
     struct cv *waitCv;
     volatile int thisFeeder;
-    volatile int bowlNum;
 };
 
 struct theBowl *theBowls;
@@ -56,15 +52,8 @@ catmouse_sync_init(int bowls)
     numBowls=bowls;
     const char* str;
     switchLock=lock_create("switchLock");
-    numLock=lock_create("numLock");
     theBowls=kmalloc(bowls * sizeof(struct theBowl));//allocate enough memory for all bowls
     for (int i=0; i<bowls; i++) {
-        str = "bowlLock" +i;
-        theBowls[i].bowlLock=lock_create(str);
-        //kprintf("created the lock at %u\n", i);
-        if(theBowls[i].bowlLock == NULL) {
-            panic("Could not create global CatMouse lock");
-        }
         str = "waitCV" + i;
         theBowls[i].waitCv=cv_create(str);
         //kprintf("created the cv at %u\n", i);
@@ -72,7 +61,6 @@ catmouse_sync_init(int bowls)
             panic("Could not create our required CV for CatMouse");
         }
         theBowls[i].thisFeeder=0;
-        theBowls[i].bowlNum=i+1;
     }
     //kprintf("Done initializing catmouse \n");
   return;
@@ -91,10 +79,10 @@ catmouse_sync_cleanup(int bowls)
 {
     //kprintf("Cleaning up catmouse\n");
     for(int i=bowls-1; i>=0; i--) {
-        lock_destroy(theBowls[i].bowlLock);
         cv_destroy(theBowls[i].waitCv);
         //kfree(theBowls[bowls-1]);
     }
+    lock_destroy(switchLock);
 
 }
 
