@@ -221,6 +221,41 @@ mouse_after_eating(unsigned int bowl)
     wakeAll();
 }
 
+/*int eatingUpdate(){
+   // kprintf("Eating update running\n");
+    int eatCount=0;
+    for(int i=0; i<numBowls; i++) {
+        if(theBowls[i].thisFeeder != 0) {
+            eatCount++;
+            anyEating=theBowls[i].thisFeeder;
+        }
+    }
+    if(eatCount ==0) {
+        anyEating=0;
+    }
+    return eatCount;
+}*/
+
+/*void wakeCats() {
+    kprintf("Attempting to wake all cats\n");
+    for (int i=0; i<numBowls; i++) {
+        //lock_acquire(theBowls[i].bowlLock);
+        //cv_signal(theBowls[i].bowlCatCv, theBowls[i].bowlLock);
+        cv_signal(theBowls[i].bowlCatCv, switchLock);
+        //lock_release(theBowls[i].bowlLock);
+    }
+}
+
+void wakeMice() {
+    kprintf("Attempting to wake all mice\n");
+    for (int i=0; i<numBowls; i++) {
+        //lock_acquire(theBowls[i].bowlLock);
+        //cv_signal(theBowls[i].bowlMouseCv, theBowls[i].bowlLock);
+        cv_signal(theBowls[i].bowlMouseCv, switchLock);
+        //lock_release(theBowls[i].bowlLock);
+    }
+}*/
+
 void wakeAll(){
  //kprintf("Attempting to wake all \n");
     for (int i=0; i<numBowls; i++) {
