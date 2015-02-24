@@ -38,7 +38,7 @@
 
 #include <spinlock.h>
 #include <thread.h> /* required for struct threadarray */
-#include <opt-a2.h>
+#include <opt-A2.h>
 
 struct addrspace;
 struct vnode;
@@ -72,9 +72,46 @@ struct proc {
 	/* add more material here as needed */
 	
 	#if OPT_A2
-	pid_t procPID;
+	//the id of this process
+	pid_t pid;
 	#endif
 };
+
+#if OPT_A2
+//structure used globally to track parent child relations, exit codes and used pids
+struct procInfo {
+    pid_t thisPid;
+    pid_t parent;
+    pid_t *childPids;
+    int exitCode;
+    struct semaphore *procSem; //used in conjunction with waitPID typically
+};
+
+//sets up the procInfo and assings the new proc its pid
+//this is typically run when a proc is creating a new child proc
+struct procInfo* setupProc(struct proc *proc);
+
+//used from within procs
+//removes pid from our global struct
+int removePID(pid_t givPid);
+
+//find the exact spot of procInfo in our global struct
+int findPInfo(pid_t givPid);
+
+//removes the specified procInfo from our global array
+//this is done only when the specific proc is finished AND its parent is finished
+void removePInfo(int ploc);
+
+//checks if any children of current proc need to be removed
+//this is only run when the current proc is ending
+int checkChildren(int ploc);
+
+int updatePid(int i);
+
+int getExit(pid_t pid);
+
+#endif
+
 
 /* This is the process structure for the kernel and for kernel-only threads. */
 extern struct proc *kproc;

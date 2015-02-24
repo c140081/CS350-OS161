@@ -266,7 +266,7 @@ proc_create_runprogram(const char *name)
 	int spot =findPInfo(curproc->pid);
 	cPI = array_get(globalProcs, spot);
 	int *childId = kmalloc(sizeof(pid_t));
-	*childId=pI->thisPid;
+	childId=pI->thisPid;
 	array_add(cPI->childPids, childId, NULL);
 	#endif
 	
