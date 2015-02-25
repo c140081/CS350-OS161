@@ -138,9 +138,11 @@ common_prog(int nargs, char **args)
 
 	/* Create a process for the new program to run in. */
 	proc = proc_create_runprogram(args[0] /* name */);
+    kprintf("in menu pcr \n");
 	if (proc == NULL) {
 		return ENOMEM;
 	}
+    kprintf("in menu pcr checked \n");
 
 	result = thread_fork(args[0] /* thread name */,
 			proc /* new process */,
@@ -294,7 +296,7 @@ static int cmd_dbtOn(int nargs, char **args) {
     (void)nargs;
     (void)args;
     if(dbflags==0) {
-        dbflags=1; //referenced in lib.h
+        dbflags=0x0010; //referenced in lib.h
         kprintf("Debugging is now on\n");
     }
     return 0;

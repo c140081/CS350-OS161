@@ -110,6 +110,9 @@ int updatePid(int i);
 
 int getExit(pid_t pid);
 
+
+struct lock *grabLock(void);
+
 #endif
 
 

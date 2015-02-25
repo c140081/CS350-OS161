@@ -10,27 +10,33 @@
 #include <addrspace.h>
 #include <copyinout.h>
 #include <mips/trapframe.h>//need to include this so I can use sizeof(struct trapframe)
+#include <opt-A2.h>
+#include <synch.h>
 
+extern struct array *globalProcs;
   /* this implementation of sys__exit does not do anything with the exit code */
   /* this needs to be fixed to get exit() and waitpid() working properly */
 
 void sys__exit(int exitcode) {
-
   struct addrspace *as;
   struct proc *p = curproc;
   //assign the exitcode!
-  #if OPT-A2
+  #if OPT_A2
+  struct lock *mainLock = grabLock();
+  KASSERT(mainLock != NULL);
+  lock_acquire(mainLock);
   int spot =findPInfo(p->pid);
-  procInfo *thisPInfo; 
+  struct procInfo *thisPInfo; 
+  thisPInfo = array_get(globalProcs, spot);
   thisPInfo->exitCode=_MKWAIT_EXIT(exitcode); //encode the exit code as discussed in the waitpid man pages
   checkChildren(spot);
-  V(thisPInfo->sem);
-  
+  V(thisPInfo->procSem);
+  lock_release(mainLock);
   #endif
   
   DEBUG(DB_SYSCALL,"Syscall: _exit(%d)\n",exitcode);
 
-  KASSERT(curproc->p_addrspace != NULL);
+  //KASSERT(curproc->p_addrspace != NULL);
   as_deactivate();
   /*
    * clear p_addrspace before calling as_destroy. Otherwise if
@@ -60,6 +66,7 @@ void sys__exit(int exitcode) {
 int
 sys_getpid(pid_t *retval)
 {
+    //kprintf("sys_getpid\n");
   *retval = curproc->pid;
   return(0);
 }
@@ -108,28 +115,34 @@ sys_waitpid(pid_t pid,
     Return 0 for the child process and the PID of the child to the parent
 */
 int sys_fork(struct trapframe *tf, pid_t *retval) {
+    //kprintf("now running sys_fork \n");
     //create process structure for child
     struct proc* newProc;
     newProc = proc_create_runprogram("Process");
     //create and copy as from parent to child
-    struct addrspace *newAs;
-    newAs = kmalloc(sizeof(struct addrspace));
-    
-    as_copy(curproc->p_addrspace, &newAs);//TODO verify usage
+    KASSERT(newProc != NULL);
+    //struct addrspace *newAs;
+    //newAs = kmalloc(sizeof(struct addrspace));
+    //kprintf("about to copy as\n");
+    as_copy(curproc->p_addrspace, &newProc->p_addrspace);//TODO verify usage
     
     //attach newly created as to child structure
-    newProc->p_addrspace = newAs;
+    //newProc->p_addrspace = newAs;
     
     //create thread for child
     struct trapframe *newTf;
     newTf = kmalloc(sizeof(struct trapframe));
     //almost forgot to actually copy the tf!!
-    memcpy(newTf, tf, sizeof(struct trapframe));//deep memory copy of the exact trap frame!
+    //memcpy(newTf, tf, sizeof(struct trapframe));//deep memory copy of the exact trap frame!
+    *newTf = *tf;
     //thread_fork found in kern/thread/thread.c
     //data2 seems to be just a spot to save arbitrary data after digging into switchframes... dead end after hitting sf_s2 in switchframe.c
     //just put 0 there for now, dont think we need anything
-    thread_fork("Thread", newProc, (void *)enter_forked_process,(void *)newTf, 0);
-    
+    KASSERT(newTf != NULL);
+    //KASSERT(newProc->p_addrspace->as_pbase1 !=0);
+    //kprintf("entering threadfork\n");
+    thread_fork("Thread", newProc, (void *)enter_forked_process,newTf, 0);
+    //kprintf("returning from threadfork\n");
     //child thread needs to put trapframe on the stack and modify it
     //call mips_usermode
     //^^^ both done in enter_forked_process

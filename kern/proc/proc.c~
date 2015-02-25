@@ -245,6 +245,7 @@ array_setsize(globalProcs, 0);
 struct proc *
 proc_create_runprogram(const char *name)
 {
+    //kprintf("starting pcr\n");
 	struct proc *proc;
 	char *console_path;
 
@@ -252,11 +253,15 @@ proc_create_runprogram(const char *name)
 	if (proc == NULL) {
 		return NULL;
 	}
-	
+	//kprintf("proc created\n");
 	#if OPT_A2
 	//create the new pidInfo section in our global structure and assign a pid to proc
+	lock_acquire(availPidLock);
+    updatePid(1);
 	struct procInfo *pI;
+	//kprintf("right before setting up proc\n");
 	pI=setupProc(proc);
+	//kprintf("have setup the proc\n");
 	int ret=array_add(globalProcs, pI, NULL);
 	if (ret!=0){
 	    //something went wrong
@@ -266,8 +271,9 @@ proc_create_runprogram(const char *name)
 	int spot =findPInfo(curproc->pid);
 	cPI = array_get(globalProcs, spot);
 	int *childId = kmalloc(sizeof(pid_t));
-	childId=pI->thisPid;
+	*childId=pI->thisPid;
 	array_add(cPI->childPids, childId, NULL);
+    lock_release(availPidLock);
 	#endif
 	
 	
@@ -316,6 +322,7 @@ proc_create_runprogram(const char *name)
 	V(proc_count_mutex);
 #endif // UW
 
+    //kprintf("Proc create program was successful\n");
 	return proc;
 }
 
@@ -416,14 +423,16 @@ curproc_setas(struct addrspace *newas)
 //this is typically run when a proc is creating a new child proc
 struct procInfo * setupProc(struct proc *proc) {
     //grab the pid lock and find a suitable number
-    lock_acquire(availPidLock);
+    //kprintf("Starting setupProc\n");
+    
     if(availPid ==-1) {
         //no more available pid slots
-        lock_release(availPidLock);
+        //lock_release(availPidLock);
         //return ENPROC; //will this work? (doubtful, use panic instead?)
         return NULL; //should error methinks, TODO
     }
     proc->pid = availPid;
+    //kprintf("assigning pid of %d to %s \n",availPid, proc->p_name);
     struct procInfo *newPInfo;
     newPInfo = kmalloc(sizeof(struct procInfo));
     newPInfo->thisPid = proc->pid;
@@ -434,9 +443,11 @@ struct procInfo * setupProc(struct proc *proc) {
         newPInfo->parent = -1;//we are the kernel proc!
     }
     newPInfo->procSem = sem_create("pidSem", 0);
-    array_setsize(newPInfo->childPids, 0);
-    updatePid(1);
-    lock_release(availPidLock);
+    struct array *childAr;
+    childAr = newPInfo->childPids;
+    childAr = array_create();
+    array_setsize(childAr, 0);
+    newPInfo->childPids=childAr;
     return newPInfo;
 }
 
@@ -459,6 +470,7 @@ void removePInfo(int pInfoLoc) {
     //properly free everything!
     struct procInfo *pI;
     pI = array_get(globalProcs, pInfoLoc);
+    //kprintf("removing pid %d\n", pI->thisPid);
     //remove the pid child array inside it
     for( int i=array_num(pI->childPids)-1; i>=0; i--) {
         array_remove(pI->childPids, i);
@@ -472,8 +484,10 @@ void removePInfo(int pInfoLoc) {
 //checks if any children of current proc need to be removed
 //this is only run when the current proc is ending
 int checkChildren(int pInfoLoc) {
-    lock_acquire(availPidLock);
+    //kprintf("checking children\n");
+
     struct procInfo *pI;
+    struct procInfo *cPI;
     int *cI;
     pI = array_get(globalProcs, pInfoLoc);
     int aSize = array_num(pI->childPids);
@@ -481,14 +495,16 @@ int checkChildren(int pInfoLoc) {
     for(int i=0; i<aSize; i++) {
         cI = array_get(pI->childPids, i);
         spot=findPInfo(*cI);
-        pI=array_get(globalProcs, spot);
-        if(pI->exitCode != -1) { //TODO verify that exitcodes cant be -1
+        cPI=array_get(globalProcs, spot);
+        if(cPI->exitCode != -1) { //TODO verify that exitcodes cant be -1
             //remove it
+            array_remove(pI->childPids, i);
             removePInfo(spot);
             i--;
+            aSize--;
+            //remove it in parent array aswell
         }
     }
-    lock_release(availPidLock);
     return 0;
 }
 
@@ -497,33 +513,37 @@ int checkChildren(int pInfoLoc) {
 int updatePid(int cur) {
     struct procInfo *pI;
     int aSize = array_num(globalProcs);
+    int newCur =cur;
     for (int i=0; i<aSize; i++) {
         pI =array_get(globalProcs, i);
-        if(pI->thisPid==cur) {
-            return updatePid(cur++);
+        if(pI->thisPid==newCur) {
+            newCur++;
+            return updatePid(newCur);
         }
     }
-    availPid=cur;
-    return cur;
+    availPid=newCur;
+    return newCur;
 }
 
 int getExit(pid_t childPid) {
     lock_acquire(availPidLock);
+    //kprintf("Getting exit at %d \n", childPid);
     int childSpot;
     childSpot=findPInfo(childPid);
     struct procInfo *cI;
     cI = array_get(globalProcs, childSpot);
+    KASSERT(cI != NULL);
+    KASSERT(cI->procSem != NULL);
     lock_release(availPidLock);
     
     P(cI->procSem);
     
-    //have to require and refind the position because it could have changed
-    lock_acquire(availPidLock);
-    childSpot=findPInfo(childPid);
-    cI = array_get(globalProcs, childSpot);
-    lock_release(availPidLock);
     
     return cI->exitCode;
+}
+
+struct lock *grabLock(){
+    return availPidLock;
 }
 
 #endif

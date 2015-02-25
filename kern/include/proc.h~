@@ -82,7 +82,7 @@ struct proc {
 struct procInfo {
     pid_t thisPid;
     pid_t parent;
-    pid_t *childPids;
+    struct array *childPids;
     int exitCode;
     struct semaphore *procSem; //used in conjunction with waitPID typically
 };
@@ -109,6 +109,9 @@ int checkChildren(int ploc);
 int updatePid(int i);
 
 int getExit(pid_t pid);
+
+
+struct lock *grabLock(void){
 
 #endif
 
