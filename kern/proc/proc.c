@@ -50,6 +50,8 @@
 #include <vfs.h>
 #include <synch.h>
 #include <kern/fcntl.h>  
+#include <kern/errno.h>
+#include <limits.h>
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
@@ -258,6 +260,9 @@ proc_create_runprogram(const char *name)
 	//create the new pidInfo section in our global structure and assign a pid to proc
 	lock_acquire(availPidLock);
     updatePid(1);
+    if(availPid > PID_MAX) {
+        return ((struct proc *)ENPROC);
+    }
 	struct procInfo *pI;
 	//kprintf("right before setting up proc\n");
 	pI=setupProc(proc);

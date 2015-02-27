@@ -36,7 +36,7 @@ void sys__exit(int exitcode) {
   
   DEBUG(DB_SYSCALL,"Syscall: _exit(%d)\n",exitcode);
 
-  //KASSERT(curproc->p_addrspace != NULL);
+  KASSERT(curproc->p_addrspace != NULL);
   as_deactivate();
   /*
    * clear p_addrspace before calling as_destroy. Otherwise if
@@ -97,7 +97,15 @@ sys_waitpid(pid_t pid,
   /* grab the exit status */
   #if OPT_A2
   //TODO error checking
-  
+  struct procInfo *pI;
+  int spot =findPInfo(pid);
+  pI = array_get(globalProcs, spot);
+  if(pI == NULL) {
+    return (ESRCH);
+  }
+  if(pI->parent != curproc->pid) {
+    return (ECHILD);
+  }
   exitstatus = getExit(pid);
   
   #endif
@@ -120,10 +128,11 @@ int sys_fork(struct trapframe *tf, pid_t *retval) {
     struct proc* newProc;
     newProc = proc_create_runprogram("Process");
     //create and copy as from parent to child
-    KASSERT(newProc != NULL);
-    //struct addrspace *newAs;
-    //newAs = kmalloc(sizeof(struct addrspace));
-    //kprintf("about to copy as\n");
+    if(newProc == NULL) {
+        return (ENOMEM);
+    } else if(newProc == (struct proc *)ENPROC) {
+        return (ENPROC);
+    }
     as_copy(curproc->p_addrspace, &newProc->p_addrspace);//TODO verify usage
     
     //attach newly created as to child structure
