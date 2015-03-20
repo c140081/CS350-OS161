@@ -12,6 +12,11 @@
 #include <mips/trapframe.h>//need to include this so I can use sizeof(struct trapframe)
 #include <opt-A2.h>
 #include <synch.h>
+#include <vm.h>
+#include <vfs.h>
+#include <test.h>
+#include <kern/fcntl.h>
+#include <limits.h>
 
 extern struct array *globalProcs;
   /* this implementation of sys__exit does not do anything with the exit code */
@@ -159,4 +164,144 @@ int sys_fork(struct trapframe *tf, pid_t *retval) {
     *retval = newProc->pid;
     return 0;
 }
+
+int sys_execv(const char *program, char **args) {
+    //kprintf("running execv\n");
+    int result;
+    int argc =0;
+	struct addrspace *as;
+	struct vnode *v;
+	vaddr_t entrypoint, stackptr;
+    struct addrspace *old_as;
+    old_as = curproc_getas();
+    if (program == NULL) {
+        //no valid program name given
+        return (ENOENT);
+    }
+    //TODO how to check for EISDIR??
+    
+    //save the program name onto heap so we can keep it
+    size_t programLen = strlen(program)+1;
+    char *newProgram = kmalloc(sizeof(char*)*programLen);
+    result = copyinstr((userptr_t)program, newProgram, programLen, NULL);//final param just leave as NULL as found in copystr
+    if(newProgram== NULL) {
+        //didnt copy over for some reason, we know that program isnt null
+        return(ENOMEM);//assume it was a memory issue
+    }
+    if(result) {
+        return result; //something else went wrong in the copying process
+    }
+    
+    //count the args
+    //my interpretation of ARG_MAX indicates that 1024 is the maximum individual argument size
+    //also 64 is the max number of args
+    while(args[argc] != NULL) {
+        if(strlen(args[argc]) >1024) {
+            return (E2BIG);
+        }
+        argc++;
+    }
+    if(argc >64) {
+        return (E2BIG);
+    }
+    
+    //save args like I did for program
+    char **newArgs= kmalloc((argc+1)*sizeof(char));//+1 because of null terminator
+    for(int i=0; i<argc; i++) {
+        newArgs[i]=kmalloc((strlen(args[i])+1)*sizeof(char));
+        result=copyinstr((userptr_t)args[i], newArgs[i], strlen(args[i])+1, NULL);
+        if(result) {
+            return result;
+        }
+    }
+    newArgs[argc] = NULL; //null terminate our new list of args
+    
+    
+    //from runprogram....
+    
+    /* Open the file. */
+	result = vfs_open(newProgram, O_RDONLY, 0, &v);
+	if (result) {
+		return result;
+	}
+
+	/* We should be a new process. */
+	//KASSERT(curproc_getas() == NULL);
+
+	/* Create a new address space. */
+	as = as_create();
+	if (as ==NULL) {
+		vfs_close(v);
+		return ENOMEM;
+	}
+
+	/* Switch to it and activate it. */
+	curproc_setas(as);
+	as_activate();
+
+	/* Load the executable. */
+	result = load_elf(v, &entrypoint);
+	if (result) {
+		/* p_addrspace will go away when curproc is destroyed */
+		vfs_close(v);
+		return result;
+	}
+
+	/* Done with the file now. */
+	vfs_close(v);
+
+	/* Define the user stack in the address space */
+	result = as_define_stack(as, &stackptr);
+	if (result) {
+		/* p_addrspace will go away when curproc is destroyed */
+		return result;
+	}
+	
+	
+	//force stackptr to be 8-byte aligned
+	//kprintf("aligning stackptr\n");
+	while(stackptr %8 !=0) {
+	    stackptr--;
+	}
+	
+	//easiest to just build this thing backwards
+	vaddr_t argptr[argc+1];
+	for (int i=argc-1; i>=0; i--) {
+	    //stackptr-=ROUNDUP(strlen(args[i])+1,4);//not necessary but makes alignment so much easier when rounded
+	    stackptr-=strlen(newArgs[i])+1;//scratch that, just re-align it later!
+	    //kprintf("copyoutstr on %s\n", newArgs[i]);
+	    //kprintf("size is %d\n", strlen(newArgs[i]));
+	    result=copyoutstr(newArgs[i], (userptr_t)stackptr, strlen(newArgs[i])+1, NULL);
+	    if(result) {
+	        return result;
+	    }
+	    argptr[i]=stackptr;
+	}
+	
+	//realign the values
+	while(stackptr %4 !=0) {
+	    stackptr--;
+	}
+	argptr[argc]=0;//null out
+	//now put addresses onto the stack!
+	for(int i=argc; i>=0; i--) {
+	    stackptr-=ROUNDUP(sizeof(vaddr_t),4);
+	    result=copyout(&argptr[i], (userptr_t)stackptr, sizeof(vaddr_t));
+	    if(result) {
+	        return result;
+	    }
+	}
+	
+	//finally destroy the old as
+	as_destroy(old_as);
+	/* Warp to user mode. */
+	enter_new_process(argc, (userptr_t)stackptr,
+			  stackptr, entrypoint);
+	
+	/* enter_new_process does not return. */
+	panic("enter_new_process returned\n");
+	return EINVAL;
+}
+
+
 
