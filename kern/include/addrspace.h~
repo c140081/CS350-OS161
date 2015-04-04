@@ -58,7 +58,6 @@ struct addrspace {
   int as_readable;
   int as_writeable;
   int as_executable;
-  bool as_loaded;
 };
 
 /*

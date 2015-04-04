@@ -70,6 +70,11 @@
  */
 #define PADDR_TO_KVADDR(paddr) ((paddr)+MIPS_KSEG0)
 
+//#if OPT_A3
+//not sure why this didnt exist before, useful to go the opposite way aswell
+#define VADDR_TO_KPADDR(vaddr) ((vaddr)-MIPS_KSEG0)
+//#endif
+
 /*
  * The top of user space. (Actually, the address immediately above the
  * last valid user address.)
